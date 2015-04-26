@@ -1,0 +1,77 @@
+---
+title: "Practical Machine Learning Prediction Assignment Report"
+output: html_document
+---
+
+##Introduction
+It is now possible to collect large amounts of data on personal activity relatively inexpensively using devices such as Jawbone Up, Nike FuelBand and Fitbit. These type of devices are part of the quantified self-movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, find patterns in their behavior, or because they are tech geeks. These people regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. This project focuses on using data from accelerometers on the belt, forearm, arm and dumbbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The data comes from Groupware@LES: group of research and development of groupware technologies http://groupware.les.inf.puc-rio.br/har
+
+##Data Processing
+In preparation to build my model, I first removed all variables from the test data which contain NAs. I then removed variables not relating to motion (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window and problem_id) as I did not find these to be useful for predicting the 20 different test cases. I only kept variables in the training data which were also in the test data. As the "classe" variable, which is the response, isn't present in the test data, it was removed from the training data. I therefore had to merge it back to the training data. This is the training set which I have based my model on, where "classe" is the response and all the other variables are the predictors.
+
+```{r}
+#Load caret library
+library(caret)
+#Read in training data
+training <- read.csv("pml-training.csv", header = TRUE)
+#Read in testing data
+testing <- read.csv("pml-testing.csv", header = TRUE)
+#Keep variables in testing data set which do not contain any NAs
+testing1 <- testing[!sapply(testing, function(x) any(is.na(x)))]
+#Remove variables from testing1 data set not relating to motion
+testing2 <- subset(testing1, select = -c(X, user_name, raw_timestamp_part_1, 
+raw_timestamp_part_2, cvtd_timestamp, new_window, num_window, problem_id))
+#Keep variables in training data set which are in testing2 data set
+keep <- intersect(names(testing2), names(training))
+training1 <- training[keep]
+#Get classe variable from training data set
+classe <- training$classe
+#Merge classe variable to training1 data set
+training2 <- cbind(training1, classe)
+```
+
+#Cross-validation
+To do cross-validation, I took this training set, training2, and split it into a sub-training and sub-test set with a proportion of 60% and 40% respectively. I built my model using random forest. I calculated the confusion matrix which showed the out of sample error and accuracy of my model.
+
+```{r}
+#Partition training2 data set into sub-training (60%) and sub-test (40%) data sets
+inTrain <- createDataPartition(training2$classe, p = 0.6)[[1]]
+train <- training2[inTrain,]
+test <- training2[-inTrain,]
+#Fit a predictive model on the sub-training data set using random forest
+rf_model <- train(classe ~ ., data=train, method="rf")
+#Predict response (classe) for sub-test data set
+rf_predictions <- predict(rf_model, test)
+rf_xtab <- table(rf_predictions, test$classe)
+#Calculate confusion matrix
+confusionMatrix(rf_xtab)
+```
+
+The confusion matrix above shows the out of sample error.
+
+##Prediction
+Due to its high accuracy on the sub-test set, the same random forest model is used to predict the 20 different test cases.
+
+```{r}
+#Fit the same predictive model on training2 data set using random forest
+rf_model1 <- train(classe ~., method="rf", data=training2)
+#Predict response (classe) for testing2 data set
+answers <- predict(rf_model1, newdata=testing2)
+```
+
+##Output files for submission
+As predict outputs answers as a vector of factors, I convert this to a character vector and create one file for each submission.
+
+```{r}
+#Convert answers from a vector of factors to a character vector
+answers1 <- as.character(answers)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+#Create one file for each submission
+pml_write_files(answers1)
+```
